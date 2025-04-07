@@ -45,7 +45,7 @@ def generate_card():
 def index():
     return redirect(url_for('login'))
 
-@app.route('/registro', methods=['GET', 'POST'])
+@app.route('/register', methods=['GET', 'POST'])
 def registro():
     if request.method == 'POST':
         username = request.form['username']
@@ -53,10 +53,10 @@ def registro():
         mayor_edad = request.form.get('mayor_edad')
         if not mayor_edad:
             flash("Debes confirmar que eres mayor de edad")
-            return redirect(url_for('registro'))
+            return redirect(url_for('register'))
         if User.query.filter_by(username=username).first():
             flash("El usuario ya existe")
-            return redirect(url_for('registro'))
+            return redirect(url_for('register'))
         new_user = User(username=username, dni=dni)
         db.session.add(new_user)
         db.session.commit()
