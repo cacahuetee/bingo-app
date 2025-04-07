@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Mis Partidas 🏆</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>🏆 Historial de Partidas</h1>
+        {% if partidas %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Multijugador</th>
+                        <th>Cartones</th>
+                        <th>Código Sala</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for partida in partidas %}
+                    <tr>
+                        <td>{{ partida.id }}</td>
+                        <td>{{ 'Sí' if partida.multiplayer else 'No' }}</td>
+                        <td>{{ partida.num_cards }}</td>
+                        <td>{{ partida.room_code or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>😕 No tienes partidas registradas aún.</p>
+        {% endif %}
+        <a href="{{ url_for('dashboard') }}">⬅ Volver al Dashboard</a>
+    </div>
+</body>
+</html>
