@@ -133,5 +133,7 @@ def handle_start(data):
 
 # --- MAIN ---
 if __name__ == '__main__':
-    db.create_all()
+    # Asegurarse de que la aplicación está en el contexto adecuado
+    with app.app_context():
+        db.create_all()  # Crea las tablas de la base de datos si no existen
     socketio.run(app, debug=True)
