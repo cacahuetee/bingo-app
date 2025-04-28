@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Sala de Bingo 🎉</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f2f2f2;
+        }
+
+        .sala-container {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .jugadores-lista {
+            margin-top: 20px;
+        }
+
+        .jugador {
+            padding: 10px;
+            margin-bottom: 8px;
+            background: #e9e9e9;
+            border-radius: 8px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            background-color: #cccccc;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="sala-container">
+        <h1>🎲 Sala de Bingo: <span id="codigoSala">{{ codigo_sala }}</span></h1>
+        <h2>Jugadores en la sala:</h2>
+        <div id="jugadores" class="jugadores-lista">
+            <!-- Jugadores aparecerán aquí -->
+        </div>
+
+        <button id="empezarPartidaBtn" disabled>Empezar Partida 🚀</button>
+        <button id="salirSalaBtn">Salir de la Sala ❌</button>
+    </div>
+
+    <script>
+        const socket = io();
+        const codigoSala = "{{ codigo_sala }}";
+        const username = "{{ session['username'] }}";
+
+        // Unirse a la sala
+        socket.emit('unirse_sala', { codigo_sala: codigoSala, username: username });
+
+        // Actualizar la lista de jugadores cuando alguien se une
+        socket.on('actualizar_jugadores', function (data) {
+            const jugadoresDiv = document.getElementById('jugadores');
+            jugadoresDiv.innerHTML = '';  // Limpiar lista de jugadores
+
+            // Añadir cada jugador a la lista
+            data.jugadores.forEach(function (jugador) {
+                const div = document.createElement('div');
+                div.className = 'jugador';
+                div.textContent = jugador;
+                jugadoresDiv.appendChild(div);
+            });
+
+            // Activar el botón de empezar partida si hay mínimo 2 jugadores
+            const btn = document.getElementById('empezarPartidaBtn');
+            btn.disabled = data.jugadores.length < 2;
+        });
+
+        socket.on('partida_iniciada', function () {
+            alert('🚀 La partida ha comenzado!');
+            // Aquí podrías redirigir a otra página o cambiar la vista
+        });
+
+        // Manejo de salida de la sala
+        document.getElementById('salirSalaBtn').addEventListener('click', function () {
+            // Enviar evento al servidor para que el jugador salga de la sala
+            socket.emit('salir_sala', { codigo_sala: codigoSala, username: username });
+
+            setTimeout(function () {
+                window.location.href = "/dashboard";  // Redirigir al dashboard (o la ruta que uses)
+            }, 300); // 300 milisegundos de delay opcional para mayor seguridad
+        });
+
+    </script>
+</body>
+
+</html>

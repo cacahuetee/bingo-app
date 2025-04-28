@@ -1,139 +1,284 @@
-from flask import Flask, render_template, redirect, url_for, request, session, flash
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, login_user, login_required, logout_user, UserMixin, current_user
-from flask_socketio import SocketIO, join_room, leave_room, emit
+# En esta parte se pone todo lo que queramos importar para luego usarlo en la aplicacion
+# render_template es para renderizar el html desde la carpeta templates que la usa por defecto
+# Flask es el framework que estamos usando para crear la aplicacion web
+from flask import Flask, render_template, redirect, url_for, request, flash, session
+
+
+from flask_socketio import SocketIO, emit, join_room, leave_room
 import random
+import string
 
+
+# Creamos la app Flask y le pasamos __name__ para que pueda encontrar rutas de archivos como templates y estáticos
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'bingo-secret-key'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///bingo.db'
-
-db = SQLAlchemy(app)
-login_manager = LoginManager(app)
 socketio = SocketIO(app)
-login_manager.login_view = 'login'
 
-# --- MODELOS ---
-class User(UserMixin, db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    dni = db.Column(db.String(9), nullable=False)
-
-class GameSession(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    multiplayer = db.Column(db.Boolean, default=False)
-    num_cards = db.Column(db.Integer, default=1)
-    room_code = db.Column(db.String(10), nullable=True)
-
-# --- LOGIN MANAGER ---
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
-
-# --- FUNCIONES DE BINGO ---
-def generate_card():
-    card = {}
-    ranges = {'B': (1, 15), 'I': (16, 30), 'N': (31, 45), 'G': (46, 60), 'O': (61, 75)}
-    for letter, (start, end) in ranges.items():
-        card[letter] = random.sample(range(start, end+1), 5)
-    card['N'][2] = 'FREE'
-    return card
-
-# --- RUTAS ---
+# Definimos la ruta de la aplicacion, en este caso la ruta principal que es la que se carga al abrir la app
 @app.route('/')
-def index():
-    return render_template('index.html')  # Redirigido a la página de inicio (index.html)
+def indexRuta():
+    return render_template('index.html')
 
-@app.route('/register', methods=['GET', 'POST'])
-def registro():
-    if request.method == 'POST':
-        username = request.form['username']
-        dni = request.form['dni']
-        mayor_edad = request.form.get('mayor_edad')
-        if not mayor_edad:
-            flash("Debes confirmar que eres mayor de edad")
-            return redirect(url_for('registro'))  # Corregido: cambio 'register' por 'registro'
-        if User.query.filter_by(username=username).first():
-            flash("El usuario ya existe")
-            return redirect(url_for('registro'))  # Corregido: cambio 'register' por 'registro'
-        new_user = User(username=username, dni=dni)
-        db.session.add(new_user)
-        db.session.commit()
-        flash("Registro exitoso")
-        return redirect(url_for('login'))
-    return render_template('register.html')
+# Esto es para hacer la conexion con la base de datos
+import psycopg2
+from dotenv import load_dotenv
+import os
 
+
+# Load environment variables from .env
+load_dotenv()
+
+# Esto es para que funcione el flash y es lo que hace que se guarde en la cookie la session
+app.secret_key = os.getenv('SECRET_KEY')
+
+
+# Fetch variables
+USER = os.getenv("user")
+PASSWORD = os.getenv("password")
+HOST = os.getenv("host")
+PORT = os.getenv("port")
+DBNAME = os.getenv("dbname")
+
+# Connect to the database
+try:
+    connection = psycopg2.connect(
+        user=USER,
+        password=PASSWORD,
+        host=HOST,
+        port=PORT,
+        dbname=DBNAME
+    )
+    print("Connection successful!")
+    
+    # Create a cursor to execute SQL queries
+    cursor = connection.cursor()
+    
+    # Example query
+    cursor.execute("SELECT NOW();")
+    result = cursor.fetchone()
+    print("Current Time:", result)
+
+    # Close the cursor and connection
+    cursor.close()
+    connection.close()
+    print("Connection closed.")
+
+except Exception as e:
+    print(f"Failed to connect: {e}")
+
+# Definimos todas las rutas que queremos usar en la aplicacion, en este caso son las rutas de los diferentes html que tenemos en la carpeta templates
 @app.route('/login', methods=['GET', 'POST'])
-def login():
+def loginRuta():
     if request.method == 'POST':
-        username = request.form['username']
-        dni = request.form['dni']
-        user = User.query.filter_by(username=username, dni=dni).first()
-        if user:
-            login_user(user)
-            return redirect(url_for('dashboard'))
-        flash("Credenciales incorrectas")
+        username = request.form.get('username')
+        dni = request.form.get('dni')
+
+        try:
+            connection = psycopg2.connect(
+                user=USER,
+                password=PASSWORD,
+                host=HOST,
+                port=PORT,
+                dbname=DBNAME
+            )
+            cursor = connection.cursor()
+
+            # Validar que el nombre de usuario y DNI coincidan con un registro en la base de datos
+            cursor.execute("SELECT id, username FROM usuarios WHERE username = %s AND dni = %s", (username, dni))
+            user = cursor.fetchone()
+
+            if user:
+                # Guardar el usuario en la sesión
+                session['user_id'] = user[0]
+                session['username'] = user[1]
+                flash("✅ ¡Bienvenido de nuevo!")
+                return redirect(url_for('dashboardRuta'))
+            else:
+                flash("⚠️ Usuario o DNI incorrectos. Intenta nuevamente.")
+
+        except Exception as e:
+            print(f"❌ Error al conectar a la base de datos: {e}")
+            flash("⚠️ Error al autenticar. Intenta de nuevo.")
+
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+
     return render_template('login.html')
 
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    return redirect(url_for('login'))
-
-@app.route('/dashboard', methods=['GET', 'POST'])
-@login_required
-def dashboard():
+@app.route('/registro', methods=['GET', 'POST'])
+def registroRuta():
     if request.method == 'POST':
-        num_cards = int(request.form['cantidad_cartones'])
-        new_session = GameSession(user_id=current_user.id, num_cards=num_cards, multiplayer=False)
-        db.session.add(new_session)
-        db.session.commit()
-        return redirect(url_for('game', game_id=new_session.id))
-    return render_template('dashboard.html', usuario_id=current_user.id)
+        username = request.form.get('username')
+        dni = request.form.get('dni')
+        mayor_edad = 'mayor_edad' in request.form  # Devuelve True si está marcado
 
-@app.route('/multijugador')
-@login_required
-def multijugador():
-    room_code = ''.join(random.choices('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', k=6))
-    new_session = GameSession(user_id=current_user.id, num_cards=1, multiplayer=True, room_code=room_code)
-    db.session.add(new_session)
-    db.session.commit()
-    return redirect(url_for('game', game_id=new_session.id))
+        try:
+            connection = psycopg2.connect(
+                user=USER,
+                password=PASSWORD,
+                host=HOST,
+                port=PORT,
+                dbname=DBNAME
+            )
+            cursor = connection.cursor()
 
-@app.route('/game/<int:game_id>')
-@login_required
-def game(game_id):
-    game_session = GameSession.query.get_or_404(game_id)
-    cards = [generate_card() for _ in range(game_session.num_cards)]
-    return render_template('game.html', game=game_session, cards=cards)
+            # Validar si el usuario o el dni ya existen
+            cursor.execute("SELECT 1 FROM usuarios WHERE username = %s OR dni = %s", (username, dni))
+            if cursor.fetchone():
+                flash("⚠️ El nombre de usuario o DNI ya están registrados.")
+                return render_template('registro.html')
 
-@app.route('/partidas/<int:usuario_id>')
-@login_required
-def partidas(usuario_id):
-    sessions = GameSession.query.filter_by(user_id=usuario_id).all()
-    return render_template('partidas.html', partidas=sessions)
+            # Insertar usuario nuevo
+            cursor.execute(
+                "INSERT INTO usuarios (username, dni, mayor_edad) VALUES (%s, %s, %s)",
+                (username, dni, mayor_edad)
+            )
+            connection.commit()
+            flash("✅ Registro exitoso. Ahora puedes iniciar sesión.")
+            return redirect(url_for('loginRuta'))
 
-# --- SOCKET.IO ---
-@socketio.on('join_game')
-def handle_join(data):
-    room = data['room']
-    join_room(room)
-    emit('user_joined', {'msg': f"{current_user.username} se ha unido."}, to=room)
+        except Exception as e:
+            print(f"❌ Error al registrar usuario: {e}")
+            flash("Error al registrar el usuario. Intenta de nuevo.")
+            print('HJ')
+            return render_template('registro.html')
 
-@socketio.on('start_game')
-def handle_start(data):
-    room = data['room']
-    numbers = list(range(1, 76))
-    random.shuffle(numbers)
-    for num in numbers:
-        emit('new_number', {'number': num}, to=room)
-        socketio.sleep(3)
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
 
-# --- MAIN ---
+    return render_template('registro.html')
+
+@app.route('/dashboard')
+def dashboardRuta():
+    if 'user_id' not in session:
+        flash("⚠️ Debes iniciar sesión primero.")
+        return redirect(url_for('loginRuta'))
+    return render_template('dashboard.html')
+
+
+
+@app.route('/crear_sala', methods=['POST'])
+def crear_sala():
+    if 'user_id' not in session:
+        flash("⚠️ Debes iniciar sesión primero.")
+        return redirect(url_for('loginRuta'))
+
+    # Generar un ID de sala único
+    codigo_sala = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+
+    try:
+        connection = psycopg2.connect(
+            user=USER,
+            password=PASSWORD,
+            host=HOST,
+            port=PORT,
+            dbname=DBNAME
+        )
+        cursor = connection.cursor()
+
+        # Insertar la nueva sala
+        cursor.execute(
+            "INSERT INTO salas (id, creador_id, estado) VALUES (%s, %s, %s)",
+            (codigo_sala, session['user_id'], 'esperando')
+        )
+        connection.commit()
+
+        flash(f"✅ Sala creada: {codigo_sala}")
+        return redirect(url_for('salaRuta', codigo_sala=codigo_sala))
+
+    except Exception as e:
+        print(f"❌ Error al crear sala: {e}")
+        flash("⚠️ Error al crear la sala. Intenta de nuevo.")
+        return redirect(url_for('dashboardRuta'))
+
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+# Para guardar quienes están en qué sala
+# Lista de salas (esto es solo un ejemplo, puede estar en una base de datos)
+salas = {}
+
+@socketio.on('unirse_sala')
+def handle_unirse_sala(data):
+    codigo_sala = data['codigo_sala']
+    username = data['username']
+    sid = request.sid  # <- El socket ID de quien acaba de entrar
+    
+    if codigo_sala not in salas:
+        salas[codigo_sala] = {'jugadores': []}
+
+    if username not in salas[codigo_sala]['jugadores']:
+        salas[codigo_sala]['jugadores'].append(username)
+
+    join_room(codigo_sala)
+
+    # 🔥 Manda la lista SOLO a este nuevo usuario
+    emit('actualizar_jugadores', {'jugadores': salas[codigo_sala]['jugadores']}, room=sid)
+
+    # 🔥 Ahora también manda a todos los demás (para que vean que alguien nuevo se unió)
+    emit('actualizar_jugadores', {'jugadores': salas[codigo_sala]['jugadores']}, room=codigo_sala)
+
+
+@socketio.on('salir_sala')
+def handle_salir_sala(data):
+    codigo_sala = data['codigo_sala']
+    username = data['username']
+    
+    # Verificar si la sala y el jugador existen en la lista
+    if codigo_sala in salas and username in salas[codigo_sala]['jugadores']:
+        salas[codigo_sala]['jugadores'].remove(username)
+    
+    # Emitir a todos los clientes conectados a esta sala la lista de jugadores
+    emit('actualizar_jugadores', {'jugadores': salas[codigo_sala]['jugadores']}, room=codigo_sala)
+
+    # Dejar el socket de la sala
+    leave_room(codigo_sala)
+
+
+
+@socketio.on('iniciar_partida')
+def handle_iniciar_partida(data):
+    codigo_sala = data['codigo_sala']
+    emit('partida_iniciada', room=codigo_sala)
+
+
+@app.route('/sala/<codigo_sala>')
+def salaRuta(codigo_sala):
+    if 'user_id' not in session:
+        flash("⚠️ Debes iniciar sesión primero.")
+        return redirect(url_for('loginRuta'))
+
+    # Emitir la lista de jugadores al cargar la sala
+    if codigo_sala in salas:
+        socketio.emit('actualizar_jugadores', {'jugadores': salas[codigo_sala]['jugadores']}, room=codigo_sala)
+
+    return render_template('sala.html', codigo_sala=codigo_sala)
+
+
+@app.route('/logout')
+def logoutRuta():
+    # Limpiar la sesión (esto elimina los datos del usuario)
+    session.clear()
+    flash("✅ Has cerrado sesión exitosamente.")
+    return redirect(url_for('indexRuta'))  # Redirigir al usuario a la página de inicio
+
+
+
+#si dejo el 404 el redirecionamiento no es automatico si lo quito es automatico
+#def paginaNoEncontrada(error):
+#   return redirect(url_for('indexRuta')), 404
+
+# Definimos la ruta de error 404, que es la que se carga cuando no se encuentra la pagina que se busca
+#app.register_error_handler(404, paginaNoEncontrada)
+
 if __name__ == '__main__':
-    # Asegurarse de que la aplicación está en el contexto adecuado
-    with app.app_context():
-        db.create_all()  # Crea las tablas de la base de datos si no existen
-    socketio.run(app, debug=True)
+    socketio.run(app, debug=True, port=5000)

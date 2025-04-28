@@ -1,24 +1,80 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
+
 <head>
     <meta charset="UTF-8">
-    <title>Dashboard 🎰</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
+
 <body>
-    <div class="container">
-        <div class="emoticon">🎰</div>
-        <h1>Dashboard</h1>
-        <form method="POST">
-            <input type="text" id="bingoId" placeholder="ID del Bingo">
-            <a href="{{ url_for('multijugador') }}">Unisre o Crear Sala</a>
-            <label for="cantidad_cartones">¿Cuántos cartones quieres jugar? 🎴</label>
-            <input type="number" id="cantidad_cartones" name="cantidad_cartones" min="1" max="5" required>
-            <button type="submit">Generar Cartones 🎉</button>
-        </form>     
-        <a href="{{ url_for('partidas', usuario_id=usuario_id) }}">Ver mis partidas 🏆</a>
+    <div class="dashboard-container">
+        <header>
+            <h1>¡Bienvenido! 🎰</h1>
+            <a href="{{ url_for('logoutRuta') }}" class="logout-btn">Cerrar Sesión</a>
+        </header>
+
+        <div class="dashboard-content">
+            <div class="action-cards">
+                <!-- Tarjeta de multijugador -->
+                <div class="action-card" id="multijugador-card">
+                    <h3>Multijugador 👥</h3>
+                    <p>crear una sala con amigos</p>
+                </div>
+                <form method="POST" action="{{ url_for('crear_sala') }}">
+                    <button type="submit" id="btn-sala" class="play-btn">Crear sala o Unirse</button>
+                </form>
+
+                <!-- Formulario para unirse a una sala existente -->
+                <div class="action-card" id="unirse-sala-card">
+                    <h3>Unirse a una Sala 🕹️</h3>
+                    <!-- Formulario para unirse a una sala existente -->
+                        <form id="unirse-sala-form">
+                            <label for="codigo_sala">Código de la sala:</label>
+                            <input type="text" id="codigo_sala" name="codigo_sala" required>
+                            <button type="submit" class="play-btn">Unirse</button>
+                        </form>
+
+                </div>
+
+
+                <!-- Juego individual -->
+                <div class="action-card solo-card">
+                    <h3>Juego Individual 🎮</h3>
+                    <form method="POST" action="">
+                        <div class="form-group">
+                            <label for="cantidad_cartones">Número de cartones:</label>
+                            <input type="number" id="cantidad_cartones" name="cantidad_cartones" min="1" max="5"
+                                value="1" required>
+                        </div>
+                        <button type="submit" class="play-btn">Jugar Ahora 🎉</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Historial de partidas -->
+            <a href="" class="history-link">
+                Ver mi historial de partidas 🏆
+            </a>
+        </div>
     </div>
-    <script src="{{ url_for('static', filename='socket.io.js') }}"></script>
-    <script src="{{ url_for('static', filename='scripts.js') }}"></script>
+    
+    <script>
+        document.getElementById('unirse-sala-form').addEventListener('submit', function(event) {
+            event.preventDefault(); // Evita que recargue la página
+        
+            const codigoSala = document.getElementById('codigo_sala').value.trim();
+        
+            if (codigoSala !== "") {
+                // Redirecciona al URL de la sala
+                window.location.href = `/sala/${codigoSala}`;
+            } else {
+                alert("⚠️ Por favor ingresa un código de sala.");
+            }
+        });
+        </script>
+        
 </body>
+
 </html>
